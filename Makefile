@@ -24,7 +24,7 @@ clean:
 
 build: test clean lib test-build
 
-dev: lib
+dev: build
 	@ node ./example/index.js
 
 .PHONY: install test dev

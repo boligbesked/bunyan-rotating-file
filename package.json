@@ -1,6 +1,6 @@
 {
   "name": "bunyan-rotating-file",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "RotatingFileStream with gzip and filename pattern support for use in node-bunyan",
   "main": "lib/index.js",
   "scripts": {
