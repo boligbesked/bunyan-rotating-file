@@ -3,18 +3,35 @@
 var bunyan = require('bunyan');
 var RotatingFile = require('../lib');
 
+function onError (err) {
+  console.log('we caught an error!');
+  console.error(err);
+}
+
+var coreStream = new RotatingFile({
+  path: __dirname + '/log/core.log',
+  period: 'hourly',
+  count: 5
+});
+coreStream.on('error', onError);
+
+var gzipStream = new RotatingFile({
+  path: __dirname + '/log/gzip.log',
+  period: 'hourly',
+  count: 5,
+  gzip: true
+});
+gzipStream.on('error', onError);
+
 var log = bunyan.createLogger({
   name: 'foo',
   streams: [{
-    stream: new RotatingFile({
-      path: __dirname + '/log/rotating-gzip-file.log',
-      period: 'hourly',
-      count: 5,
-      gzip: true
-    })
+    stream: coreStream
+  }, {
+    stream: gzipStream
   }]
 });
 
 setInterval(function(){
-  log.info('just a string %s', Date.now());
-}, 10000);
+  log.info('Just a string %s', Date.now());
+}, 5000);
