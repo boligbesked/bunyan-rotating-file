@@ -1,5 +1,3 @@
-'use strict';
-
 import { createGzip } from 'zlib';
 import { createReadStream, createWriteStream } from 'fs';
 

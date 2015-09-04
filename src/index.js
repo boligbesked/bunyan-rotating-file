@@ -1,5 +1,3 @@
-'use strict';
-
 import assert from 'assert';
 import fs from 'fs';
 import { inherits, format } from 'util';
@@ -18,6 +16,10 @@ const PERIODS = {
   'monthly': '1m',
   'yearly':  '1y'
 };
+
+// Cap timeout to Node's max setTimeout, see
+// <https://github.com/joyent/node/issues/8656>.
+const TIMEOUT_MAX = 2147483647; // 2^31-1
 
 function RotatingFileStream(opts) {
   // Validate that `options.count` is a number, and at >= 0
@@ -86,18 +88,16 @@ RotatingFileStream.prototype._getStreamPath = function () {
 }
 
 RotatingFileStream.prototype._createWriteStream = function () {
-  const streamPath = this._getStreamPath();
-  const streamOpts = { flags: 'a', encoding: 'utf8' };
-  this.stream = fs.createWriteStream( streamPath, streamOpts );
+  this.stream = fs.createWriteStream(this._getStreamPath(), {
+    flags: 'a',
+    encoding: 'utf8'
+  });
 }
 
 RotatingFileStream.prototype._setupNextRotate = function () {
-  const rotateAt = this._nextRotateTime();
+  const rotateAt = this._rotateAt = this._nextRotateTime();
 
   let delay = rotateAt - Date.now();
-  // Cap timeout to Node's max setTimeout, see
-  // <https://github.com/joyent/node/issues/8656>.
-  var TIMEOUT_MAX = 2147483647; // 2^31-1
   if (delay > TIMEOUT_MAX) {
     delay = TIMEOUT_MAX;
   }
@@ -117,75 +117,49 @@ RotatingFileStream.prototype._nextRotateTime = function _nextRotateTime() {
   //    as a timeout is not precise over longer periods
 
   const d = new Date();
-  let rotAt;
 
   switch (this.periodScope) {
   case 'ms':
     // Hidden millisecond period for debugging.
-    if (this._rotateAt) {
-      rotAt = this._rotateAt + this.periodNum;
-    }
-    else {
-      rotAt = Date.now() + this.periodNum;
-    }
-    break;
+    return ( this._rotateAt || Date.now() ) + this.periodNum; 
   case 'h':
     if (this._rotateAt) {
-      rotAt = this._rotateAt + this.periodNum * HOUR;
+      return this._rotateAt + this.periodNum * HOUR;
     }
-    else {
-      // First time: top of the next hour.
-      rotAt = new Date(d.getUTCFullYear(), d.getUTCMonth(),
-        d.getUTCDate(), d.getUTCHours() + 1).getTime();
-    }
-    break;
+    // First time: top of the next hour.
+    return new Date(d.getUTCFullYear(), d.getUTCMonth(),
+      d.getUTCDate(), d.getUTCHours() + 1).getTime();
   case 'd':
     if (this._rotateAt) {
-      rotAt = this._rotateAt + this.periodNum * DAY;
+      return this._rotateAt + this.periodNum * DAY;
     }
-    else {
-      // First time: start of tomorrow (i.e. at the coming midnight) UTC.
-      rotAt = new Date(d.getUTCFullYear(), d.getUTCMonth(),
-        d.getUTCDate() + 1).getTime();
-    }
-    break;
+    // First time: start of tomorrow (i.e. at the coming midnight) UTC.
+    return new Date(d.getUTCFullYear(), d.getUTCMonth(),
+      d.getUTCDate() + 1).getTime();
   case 'w':
     // Currently, always on Monday morning at 00:00:00 (UTC).
     if (this._rotateAt) {
-      rotAt = this._rotateAt + this.periodNum * WEEK;
+      return this._rotateAt + this.periodNum * WEEK;
     }
-    else {
-      // First time: this coming Monday.
-      rotAt = new Date(d.getUTCFullYear(), d.getUTCMonth(),
-        d.getUTCDate() + (8 - d.getUTCDay())).getTime();
-    }
-    break;
+    // First time: this coming Monday.
+    return new Date(d.getUTCFullYear(), d.getUTCMonth(),
+      d.getUTCDate() + (8 - d.getUTCDay())).getTime();
   case 'm':
     if (this._rotateAt) {
-      rotAt = new Date(d.getUTCFullYear(),
+      return new Date(d.getUTCFullYear(),
         d.getUTCMonth() + this.periodNum, 1).getTime();
     }
-    else {
-      // First time: the start of the next month.
-      rotAt = new Date(d.getUTCFullYear(), d.getUTCMonth() + 1, 1).getTime();
-    }
-    break;
+    // First time: the start of the next month.
+    return new Date(d.getUTCFullYear(), d.getUTCMonth() + 1, 1).getTime();
   case 'y':
     if (this._rotateAt) {
-      rotAt = new Date(d.getUTCFullYear() + this.periodNum, 0, 1).getTime();
+      return new Date(d.getUTCFullYear() + this.periodNum, 0, 1).getTime();
     }
-    else {
-      // First time: the start of the next year.
-      rotAt = new Date(d.getUTCFullYear() + 1, 0, 1).getTime();
-    }
-    break;
+    // First time: the start of the next year.
+    return new Date(d.getUTCFullYear() + 1, 0, 1).getTime();
   default:
     assert.fail(format('RotatingFile; Invalid period scope: "%s"', this.periodScope));
   }
-
-  this._rotateAt = rotAt;
-
-  return this._rotateAt;
 };
 
 RotatingFileStream.prototype._rotate = function _rotate() {
@@ -227,27 +201,25 @@ RotatingFileStream.prototype._rotate = function _rotate() {
     }
 
     gzipFile(basePath, basePath + '.gz')
-      .on('finish', function( err ) {
-        fs.unlink(basePath, function( err ) {
+      .on('finish', () => {
+        fs.unlink(basePath, err => {
           if (err) {
             _this.emit('error', err);
           }
           del();
         });
       })
-      .on('error', function( err ) {
-        _this.emit('error', err);
-      });
+      .on('error', err => _this.emit('error', err));
   }
 
   function del() {
     var delPath = basePath + ( n === 0 ? '' : '.' + String(n - 1) );
     n -= 1;
-    fs.unlink(delPath, function (err) {
-      if (err && err.name === 'ENOENT') {
+    fs.unlink(delPath, err => {
+      if (err && err.code === 'ENOENT') {
         _this.emit('error', err);
       }
-      //XXX handle err other than not exists
+      // TODO handle err other than not exists
       moves();
     });
   }
@@ -261,20 +233,18 @@ RotatingFileStream.prototype._rotate = function _rotate() {
     var after = getNthFilePath(n);
 
     n -= 1;
-    fs.exists(before, function (exists) {
+    fs.exists(before, exists => {
       if (!exists) {
-        moves();
-      } else {
-        fs.rename(before, after, function (err) {
-          if (err) {
-            _this.emit('error', err);
-            finish();
-          } else {
-            moves();
-          }
-        });
+        return moves();
       }
-    })
+      fs.rename(before, after, err => {
+        if (err) {
+          _this.emit('error', err);
+          return finish();
+        }
+        return moves();
+      });
+    });
   }
 
   function finish() {
@@ -287,7 +257,7 @@ RotatingFileStream.prototype._rotate = function _rotate() {
 RotatingFileStream.prototype._finalizeRotation = function _finalizeRotation () {
   this._createWriteStream();
 
-  this._queue.forEach((data) => this.stream.write);
+  this._queue.forEach(data => this.stream.write(data));
   this._queue = [];
 
   this._rotating = false;
