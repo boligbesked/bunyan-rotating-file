@@ -8,6 +8,9 @@ lib/%.js: src/%.js
 	@mkdir -p $(@D)
 	$(BIN)/babel $< -o $@
 
+lint:
+	@ $(BIN)/eslint .
+
 clean:
 	@rm -rf ./lib
 
