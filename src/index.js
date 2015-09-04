@@ -127,36 +127,36 @@ RotatingFileStream.prototype._nextRotateTime = function _nextRotateTime() {
       return this._rotateAt + this.periodNum * HOUR;
     }
     // First time: top of the next hour.
-    return new Date(d.getUTCFullYear(), d.getUTCMonth(),
-      d.getUTCDate(), d.getUTCHours() + 1).getTime();
+    return new Date(d.getFullYear(), d.getMonth(),
+      d.getDate(), d.getHours() + 1).getTime();
   case 'd':
     if (this._rotateAt) {
       return this._rotateAt + this.periodNum * DAY;
     }
     // First time: start of tomorrow (i.e. at the coming midnight) UTC.
-    return new Date(d.getUTCFullYear(), d.getUTCMonth(),
-      d.getUTCDate() + 1).getTime();
+    return new Date(d.getFullYear(), d.getMonth(),
+      d.getDate() + 1).getTime();
   case 'w':
     // Currently, always on Monday morning at 00:00:00 (UTC).
     if (this._rotateAt) {
       return this._rotateAt + this.periodNum * WEEK;
     }
     // First time: this coming Monday.
-    return new Date(d.getUTCFullYear(), d.getUTCMonth(),
-      d.getUTCDate() + (8 - d.getUTCDay())).getTime();
+    return new Date(d.getFullYear(), d.getMonth(),
+      d.getDate() + (8 - d.getDay())).getTime();
   case 'm':
     if (this._rotateAt) {
-      return new Date(d.getUTCFullYear(),
-        d.getUTCMonth() + this.periodNum, 1).getTime();
+      return new Date(d.getFullYear(),
+        d.getMonth() + this.periodNum, 1).getTime();
     }
     // First time: the start of the next month.
-    return new Date(d.getUTCFullYear(), d.getUTCMonth() + 1, 1).getTime();
+    return new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
   case 'y':
     if (this._rotateAt) {
-      return new Date(d.getUTCFullYear() + this.periodNum, 0, 1).getTime();
+      return new Date(d.getFullYear() + this.periodNum, 0, 1).getTime();
     }
     // First time: the start of the next year.
-    return new Date(d.getUTCFullYear() + 1, 0, 1).getTime();
+    return new Date(d.getFullYear() + 1, 0, 1).getTime();
   default:
     assert.fail(format('RotatingFile; Invalid period scope: "%s"', this.periodScope));
   }
