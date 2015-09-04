@@ -8,14 +8,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/boligbesked/bunyan-rotating-file.git"
+    "url": "https://github.com/kodyl/bunyan-rotating-file.git"
   },
   "author": "Daniel Juhl <danieljuhl@gmail.com> (http://danieljuhl.dk/)",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/boligbesked/bunyan-rotating-file/issues"
+    "url": "https://github.com/kodyl/bunyan-rotating-file/issues"
   },
-  "homepage": "https://github.com/boligbesked/bunyan-rotating-file",
+  "homepage": "https://github.com/kodyl/bunyan-rotating-file",
   "devDependencies": {
     "babel": "^4.7.16"
     "babel-eslint": "4.1.1",
