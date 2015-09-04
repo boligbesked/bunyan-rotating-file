@@ -21,6 +21,10 @@ const PERIODS = {
 // <https://github.com/joyent/node/issues/8656>.
 const TIMEOUT_MAX = 2147483647; // 2^31-1
 
+function getNthFilePath(base, n, gzip){
+  return base + ( gzip ? '.gz' : '' ) + ( n >= 0 ? '.' + String(n) : '' );
+}
+
 function RotatingFileStream(opts) {
   // Validate that `options.count` is a number, and at >= 0
   assert( typeof opts.count === 'number', format(
@@ -60,9 +64,12 @@ function RotatingFileStream(opts) {
 
   this._queue = [];
   this._rotating = false;
-  this._setupNextRotate();
 
   this._createWriteStream();
+
+  this._rotate();
+
+  this._setupNextRotate();
 }
 
 inherits(RotatingFileStream, EventEmitter);
@@ -102,9 +109,11 @@ RotatingFileStream.prototype._setupNextRotate = function () {
     delay = TIMEOUT_MAX;
   }
 
-  this.timeout = setTimeout(this._rotate.bind(this), delay);
+  this.timeout = setTimeout(() => {
+    this._rotate();
+  }, delay);
 
-  if (typeof (this.timeout.unref) === 'function') {
+  if (typeof this.timeout.unref === 'function') {
     this.timeout.unref();
   }
 }
@@ -163,13 +172,12 @@ RotatingFileStream.prototype._nextRotateTime = function _nextRotateTime() {
 };
 
 RotatingFileStream.prototype._rotate = function _rotate() {
-  var _this = this;
-
-  const { rotAt, gzip, count } = this;
+  const _this = this;
+  const { _rotateAt, gzip, count } = this;
 
   // If rotation period is > ~25 days, we have to break into multiple
   // setTimeout's. See <https://github.com/joyent/node/issues/8656>.
-  if (rotAt && rotAt > Date.now()) {
+  if ( _rotateAt && _rotateAt > Date.now()) {
     return this._setupNextRotate();
   }
 
@@ -184,42 +192,19 @@ RotatingFileStream.prototype._rotate = function _rotate() {
 
   const basePath = this.path;
 
-  function getNthFilePath(n){
-    let nthPath = basePath;
-    if (gzip) {
-      nthPath += '.gz';
-    }
-    if (n >= 0) {
-      nthPath += '.' + String(n);
-    }
-    return nthPath;
-  }
-
-  function zip() {
-    if (!gzip) {
-      return del();
-    }
-
-    gzipFile(basePath, basePath + '.gz')
-      .on('finish', () => {
-        fs.unlink(basePath, err => {
-          if (err) {
-            _this.emit('error', err);
-          }
-          del();
-        });
-      })
-      .on('error', err => _this.emit('error', err));
-  }
-
-  function del() {
-    var delPath = basePath + ( n === 0 ? '' : '.' + String(n - 1) );
+  function del( basePath ) {
+    const delPath = basePath + ( n === 0 ? '' : '.' + String(n - 1) );
     n -= 1;
     fs.unlink(delPath, err => {
-      if (err && err.code === 'ENOENT') {
-        _this.emit('error', err);
+      if (err) {
+        if (err.code === 'ENOENT') {
+          _this.emit('debug', err);
+        }
+        else {
+          _this.emit('error', err);
+        }
       }
-      // TODO handle err other than not exists
+      
       moves();
     });
   }
@@ -229,8 +214,8 @@ RotatingFileStream.prototype._rotate = function _rotate() {
       return finish();
     }
 
-    var before = getNthFilePath(n-1);
-    var after = getNthFilePath(n);
+    const before = getNthFilePath(basePath, n-1, gzip);
+    const after = getNthFilePath(basePath, n, gzip);
 
     n -= 1;
     fs.exists(before, exists => {
@@ -251,7 +236,26 @@ RotatingFileStream.prototype._rotate = function _rotate() {
     _this._finalizeRotation();
   }
 
-  zip();
+  function zip(basePath) {
+    if (!gzip) {
+      return del(basePath);
+    }
+
+    const gzipPath = basePath + '.gz';
+
+    gzipFile(basePath, gzipPath)
+      .on('finish', () => {
+        fs.unlink(basePath, err => {
+          if (err) {
+            _this.emit('error', err);
+          }
+          del(gzipPath);
+        });
+      })
+      .on('error', err => _this.emit('error', err));
+  }
+
+  zip(basePath);
 };
 
 RotatingFileStream.prototype._finalizeRotation = function _finalizeRotation () {
