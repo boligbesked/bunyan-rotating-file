@@ -21,10 +21,6 @@ const PERIODS = {
 // <https://github.com/joyent/node/issues/8656>.
 const TIMEOUT_MAX = 2147483647; // 2^31-1
 
-function getNthFilePath(base, n, gzip){
-  return base + ( gzip ? '.gz' : '' ) + ( n >= 0 ? '.' + String(n) : '' );
-}
-
 function RotatingFileStream(opts) {
   // Validate that `options.count` is a number, and at >= 0
   assert( typeof opts.count === 'number', format(
@@ -60,14 +56,12 @@ function RotatingFileStream(opts) {
 
   this.path = opts.path;
   this.count = opts.count;
-  this.gzip = !!opts.gzip;
+  this.gzip = Boolean(opts.gzip);
 
   this._queue = [];
   this._rotating = false;
 
   this._createWriteStream();
-
-  this._rotate();
 
   this._setupNextRotate();
 }
@@ -171,6 +165,10 @@ RotatingFileStream.prototype._nextRotateTime = function _nextRotateTime() {
   }
 };
 
+RotatingFileStream.prototype.getNthFilePath = function getNthFilePath (n) {
+  return this.path + ( this.gzip ? '.gz' : '' ) + ( n >= 0 ? '.' + String(n) : '' );
+}
+
 RotatingFileStream.prototype._rotate = function _rotate() {
   const _this = this;
   const { _rotateAt, gzip, count } = this;
@@ -189,8 +187,6 @@ RotatingFileStream.prototype._rotate = function _rotate() {
   this.stream.end();
 
   let n = this.count;
-
-  const basePath = this.path;
 
   function del( basePath ) {
     const delPath = basePath + ( n === 0 ? '' : '.' + String(n - 1) );
@@ -214,8 +210,8 @@ RotatingFileStream.prototype._rotate = function _rotate() {
       return finish();
     }
 
-    const before = getNthFilePath(basePath, n-1, gzip);
-    const after = getNthFilePath(basePath, n, gzip);
+    const before = _this.getNthFilePath(n-1);
+    const after = _this.getNthFilePath(n);
 
     n -= 1;
     fs.exists(before, exists => {
@@ -255,7 +251,7 @@ RotatingFileStream.prototype._rotate = function _rotate() {
       .on('error', err => _this.emit('error', err));
   }
 
-  zip(basePath);
+  zip(this.path);
 };
 
 RotatingFileStream.prototype._finalizeRotation = function _finalizeRotation () {
