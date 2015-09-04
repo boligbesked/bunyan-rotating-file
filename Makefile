@@ -11,18 +11,20 @@ lib/%.js: src/%.js
 lint:
 	@ $(BIN)/eslint .
 
+test: lint
+	@ NODE_PATH='./test' $(BIN)/mocha \
+		--compilers js:babel/register   \
+		./test/src.js
+
+test-build:
+	@ NODE_PATH='./test' $(BIN)/mocha ./test/lib.js
+
 clean:
 	@rm -rf ./lib
 
-build: test clean lib
+build: test clean lib test-build
 
 dev: lib
 	@ node ./example/index.js
-
-test:
-	@ NODE_PATH='./test' $(BIN)/mocha \
-		--require mocha-clean           \
-		--compilers js:babel/register   \
-		./test/*.test.js
 
 .PHONY: install test dev
